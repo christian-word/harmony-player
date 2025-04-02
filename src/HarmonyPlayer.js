@@ -1,5 +1,5 @@
 /**
- * Harmony Player v1.0
+ * Harmony Player v1.1
  * Универсальный медиаплеер (Web Component)
  * Поддержка: аудио, видео, YouTube
  * Лицензия: MIT
@@ -12,6 +12,7 @@ class HarmonyPlayer extends HTMLElement {
     this.youtubePlayer = null;
     this.currentTimeInterval = null;
     this.isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+    this.mediaElement = null;
 
     // Шаблон компонента
     this.shadowRoot.innerHTML = `
@@ -48,10 +49,15 @@ class HarmonyPlayer extends HTMLElement {
           width: 100%;
           border-radius: 8px;
           display: block;
+          background: #000;
         }
 
         .youtube-container {
           aspect-ratio: 16/9;
+        }
+
+        video {
+          height: auto;
         }
 
         .controls-row {
@@ -213,7 +219,10 @@ class HarmonyPlayer extends HTMLElement {
   }
 
   initYouTube(videoId) {
-    if (!videoId) return;
+    if (!videoId) {
+      console.error('Не указан video-id для YouTube');
+      return;
+    }
 
     // Для мобильных показываем оверлей
     if (this.isMobile) {
@@ -259,6 +268,7 @@ class HarmonyPlayer extends HTMLElement {
   }
 
   onYouTubeReady() {
+    console.log('YouTube плеер готов');
     this.updateYouTubeDuration();
     this.playBtn.disabled = false;
   }
@@ -278,17 +288,46 @@ class HarmonyPlayer extends HTMLElement {
   }
 
   initVideo(src) {
-    if (!src) return;
-    this.videoElement.src = src;
+    if (!src) {
+      console.error('Не указан src для видео');
+      return;
+    }
+
+    // Очищаем YouTube контейнер
+    this.youtubeContainer.innerHTML = '';
+    this.mobileOverlay.style.display = 'none';
+
+    // Настраиваем видео элемент
     this.videoElement.style.display = 'block';
+    this.videoElement.src = src;
+    this.videoElement.controls = false;
+    this.mediaElement = this.videoElement;
+
+    console.log('Видео инициализировано:', src);
+
+    this.playBtn.disabled = false;
   }
 
   initAudio(src) {
-    if (!src) return;
+    if (!src) {
+      console.error('Не указан src для аудио');
+      return;
+    }
+
+    // Очищаем медиа элементы
+    this.youtubeContainer.innerHTML = '';
+    this.videoElement.style.display = 'none';
+    this.mobileOverlay.style.display = 'none';
+
+    // Создаем аудио элемент
     const audio = new Audio(src);
     audio.style.display = 'none';
     this.shadowRoot.appendChild(audio);
     this.mediaElement = audio;
+
+    console.log('Аудио инициализировано:', src);
+
+    this.playBtn.disabled = false;
   }
 
   setupEvents() {
@@ -296,9 +335,16 @@ class HarmonyPlayer extends HTMLElement {
     this.progressBar.addEventListener('input', () => this.seek());
     this.volumeBar.addEventListener('input', () => this.setVolume());
 
+    // Общие события для audio/video
     if (this.mediaElement) {
       this.mediaElement.addEventListener('timeupdate', () => this.updateTime());
-      this.mediaElement.addEventListener('loadedmetadata', () => this.updateDuration());
+      this.mediaElement.addEventListener('loadedmetadata', () => {
+        console.log('Метаданные загружены');
+        this.updateDuration();
+      });
+      this.mediaElement.addEventListener('error', (e) => {
+        console.error('Ошибка медиа:', e);
+      });
     }
   }
 
@@ -315,6 +361,9 @@ class HarmonyPlayer extends HTMLElement {
         this.mediaElement.play()
           .then(() => {
             this.playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+          })
+          .catch(e => {
+            console.error('Ошибка воспроизведения:', e);
           });
       } else {
         this.mediaElement.pause();
