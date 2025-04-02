@@ -1,127 +1,116 @@
-/**
- * Harmony Player v1.1
- * Универсальный медиаплеер (Web Component)
- * Поддержка: аудио, видео, YouTube
- * Лицензия: MIT
- */
-
 class HarmonyPlayer extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
     this.youtubePlayer = null;
-    this.currentTimeInterval = null;
-    this.isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
     this.mediaElement = null;
 
-    // Шаблон компонента
+    // Оригинальный дизайн (как у вас было)
     this.shadowRoot.innerHTML = `
       <style>
-        :host {
-          display: block;
-          --primary-color: #007bff;
-          --progress-color: #007bff;
-          --volume-color: #007bff;
-        }
-
         .player-container {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          padding: 15px;
           background: #f5f5f5;
           border-radius: 15px;
-          padding: 15px;
+          width: 100%;
           max-width: 500px;
-          margin: 0 auto;
+          margin: 20px auto;
           box-shadow: 0 2px 10px rgba(0,0,0,0.1);
           font-family: Arial, sans-serif;
         }
-
-        .media-container {
-          position: relative;
-          display: none;
-        }
-
-        :host([type="video"]) .media-container,
-        :host([type="youtube"]) .media-container {
-          display: block;
-          margin-bottom: 10px;
-        }
-
-        video, .youtube-container {
-          width: 100%;
-          border-radius: 8px;
-          display: block;
-          background: #000;
-        }
-
-        .youtube-container {
-          aspect-ratio: 16/9;
-        }
-
-        video {
-          height: auto;
-        }
-
-        .controls-row {
+        
+        .player-controls {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
+          width: 100%;
         }
-
-        .play-btn {
+        
+        .play-button {
           width: 40px;
           height: 40px;
           border-radius: 50%;
-          background: var(--primary-color);
-          color: white;
-          border: none;
-          cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
+          background: #007bff;
+          color: white;
+          cursor: pointer;
+          border: none;
+          transition: background 0.3s;
           flex-shrink: 0;
         }
-
-        .play-btn:disabled {
-          opacity: 0.5;
+        
+        .play-button:hover {
+          background: #0069d9;
         }
-
-        .progress-container {
-          flex-grow: 1;
-          min-width: 50px;
-        }
-
-        .progress-bar {
-          width: 100%;
-          height: 4px;
-          cursor: pointer;
-          accent-color: var(--progress-color);
-        }
-
-        .time-display {
-          font-size: 12px;
-          color: #666;
-          white-space: nowrap;
-          margin: 0 5px;
-          min-width: 100px;
-          text-align: center;
-        }
-
-        .volume-control {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-        }
-
-        .volume-bar {
-          width: 80px;
-          accent-color: var(--volume-color);
-        }
-
-        svg {
+        
+        .play-button svg {
           width: 20px;
           height: 20px;
           fill: currentColor;
         }
-
+        
+        .progress-container {
+          flex-grow: 1;
+        }
+        
+        .progress-bar {
+          width: 100%;
+          height: 4px;
+          cursor: pointer;
+          accent-color: #007bff;
+        }
+        
+        .time-info {
+          display: flex;
+          justify-content: space-between;
+          font-size: 12px;
+          color: #666;
+          margin-top: 3px;
+        }
+        
+        .volume-control {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          flex-shrink: 0;
+        }
+        
+        .volume-icon {
+          width: 20px;
+          height: 20px;
+        }
+        
+        .volume-slider {
+          width: 80px;
+          height: 4px;
+          accent-color: #007bff;
+          cursor: pointer;
+        }
+        
+        /* Стили для медиа-контейнера */
+        .media-container {
+          display: none;
+          margin-bottom: 10px;
+          border-radius: 8px;
+          overflow: hidden;
+        }
+        
+        :host([type="video"]) .media-container,
+        :host([type="youtube"]) .media-container {
+          display: block;
+        }
+        
+        video, .youtube-iframe {
+          width: 100%;
+          display: block;
+        }
+        
+        /* Мобильный оверлей для YouTube */
         .mobile-overlay {
           display: none;
           position: absolute;
@@ -129,42 +118,36 @@ class HarmonyPlayer extends HTMLElement {
           left: 0;
           width: 100%;
           height: 100%;
-          background: rgba(0,0,0,0.5);
+          background: rgba(0,0,0,0.7);
           color: white;
-          flex-direction: column;
-          align-items: center;
           justify-content: center;
-          border-radius: 8px;
+          align-items: center;
+          flex-direction: column;
         }
-
-        .mobile-play-btn {
-          background: var(--primary-color);
-          color: white;
-          border: none;
-          padding: 10px 20px;
-          border-radius: 20px;
-          cursor: pointer;
-          margin-top: 10px;
-        }
-
+        
         :host([type="youtube"]) .mobile-overlay {
-          display: ${this.isMobile ? 'flex' : 'none'};
+          display: ${/Android|iPhone|iPad/i.test(navigator.userAgent) ? 'flex' : 'none'};
         }
       </style>
-
+      
       <div class="player-container">
+        <!-- Контейнер для видео/YouTube -->
         <div class="media-container">
-          <div class="youtube-container"></div>
           <video></video>
-          
+          <div class="youtube-iframe"></div>
           <div class="mobile-overlay">
-            <p>YouTube видео</p>
-            <button class="mobile-play-btn">▶️ Воспроизвести</button>
+            <button class="play-button" style="margin-bottom: 10px;">
+              <svg viewBox="0 0 24 24" width="30" height="30">
+                <path d="M8 5v14l11-7z" fill="white"/>
+              </svg>
+            </button>
+            <p style="color: white; margin: 0;">Нажмите для воспроизведения</p>
           </div>
         </div>
-
-        <div class="controls-row">
-          <button class="play-btn" id="playBtn">
+        
+        <!-- Оригинальные контролы (как у вас было) -->
+        <div class="player-controls">
+          <button class="play-button" id="playButton">
             <svg viewBox="0 0 24 24" id="playIcon">
               <path d="M8 5v14l11-7z"/>
             </svg>
@@ -172,30 +155,32 @@ class HarmonyPlayer extends HTMLElement {
           
           <div class="progress-container">
             <input type="range" class="progress-bar" id="progressBar" min="0" max="100" value="0">
+            <div class="time-info">
+              <span id="currentTime">0:00</span>
+              <span id="duration">0:00</span>
+            </div>
           </div>
           
-          <span class="time-display" id="timeDisplay">--:-- / --:--</span>
-          
           <div class="volume-control">
-            <svg viewBox="0 0 24 24">
+            <svg class="volume-icon" viewBox="0 0 24 24">
               <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
             </svg>
-            <input type="range" class="volume-bar" id="volumeBar" min="0" max="100" value="70">
+            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="70">
           </div>
         </div>
       </div>
     `;
 
     // Получаем элементы
-    this.playBtn = this.shadowRoot.getElementById('playBtn');
+    this.playButton = this.shadowRoot.getElementById('playButton');
     this.playIcon = this.shadowRoot.getElementById('playIcon');
     this.progressBar = this.shadowRoot.getElementById('progressBar');
-    this.volumeBar = this.shadowRoot.getElementById('volumeBar');
-    this.timeDisplay = this.shadowRoot.getElementById('timeDisplay');
-    this.youtubeContainer = this.shadowRoot.querySelector('.youtube-container');
+    this.volumeSlider = this.shadowRoot.getElementById('volumeSlider');
+    this.currentTimeEl = this.shadowRoot.getElementById('currentTime');
+    this.durationEl = this.shadowRoot.getElementById('duration');
     this.videoElement = this.shadowRoot.querySelector('video');
+    this.youtubeContainer = this.shadowRoot.querySelector('.youtube-iframe');
     this.mobileOverlay = this.shadowRoot.querySelector('.mobile-overlay');
-    this.mobilePlayBtn = this.shadowRoot.querySelector('.mobile-play-btn');
   }
 
   connectedCallback() {
@@ -203,30 +188,23 @@ class HarmonyPlayer extends HTMLElement {
     const src = this.getAttribute('src');
     const videoId = this.getAttribute('video-id');
 
-    // Инициализация в зависимости от типа
-    switch(type) {
-      case 'youtube':
-        this.initYouTube(videoId);
-        break;
-      case 'video':
-        this.initVideo(src);
-        break;
-      default:
-        this.initAudio(src);
+    if (type === 'youtube') {
+      this.initYouTube(videoId);
+    } else if (type === 'video') {
+      this.initVideo(src);
+    } else {
+      this.initAudio(src);
     }
 
     this.setupEvents();
   }
 
   initYouTube(videoId) {
-    if (!videoId) {
-      console.error('Не указан video-id для YouTube');
-      return;
-    }
+    if (!videoId) return;
 
-    // Для мобильных показываем оверлей
-    if (this.isMobile) {
-      this.mobilePlayBtn.addEventListener('click', () => {
+    if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      const mobilePlayBtn = this.mobileOverlay.querySelector('.play-button');
+      mobilePlayBtn.addEventListener('click', () => {
         this.mobileOverlay.style.display = 'none';
         this.loadYouTubeAPI(videoId);
       });
@@ -255,7 +233,6 @@ class HarmonyPlayer extends HTMLElement {
     this.youtubePlayer = new YT.Player(this.youtubeContainer, {
       videoId: videoId,
       playerVars: {
-        autoplay: 0,
         controls: 0,
         disablekb: 1,
         modestbranding: 1
@@ -267,83 +244,35 @@ class HarmonyPlayer extends HTMLElement {
     });
   }
 
-  onYouTubeReady() {
-    console.log('YouTube плеер готов');
-    this.updateYouTubeDuration();
-    this.playBtn.disabled = false;
-  }
-
-  onYouTubeStateChange(event) {
-    switch(event.data) {
-      case YT.PlayerState.PLAYING:
-        this.startTimeUpdate();
-        this.playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
-        break;
-      case YT.PlayerState.PAUSED:
-      case YT.PlayerState.ENDED:
-        clearInterval(this.currentTimeInterval);
-        this.playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
-        break;
-    }
-  }
-
   initVideo(src) {
-    if (!src) {
-      console.error('Не указан src для видео');
-      return;
-    }
-
-    // Очищаем YouTube контейнер
-    this.youtubeContainer.innerHTML = '';
-    this.mobileOverlay.style.display = 'none';
-
-    // Настраиваем видео элемент
-    this.videoElement.style.display = 'block';
+    if (!src) return;
     this.videoElement.src = src;
     this.videoElement.controls = false;
     this.mediaElement = this.videoElement;
-
-    console.log('Видео инициализировано:', src);
-
-    this.playBtn.disabled = false;
   }
 
   initAudio(src) {
-    if (!src) {
-      console.error('Не указан src для аудио');
-      return;
-    }
-
-    // Очищаем медиа элементы
-    this.youtubeContainer.innerHTML = '';
-    this.videoElement.style.display = 'none';
-    this.mobileOverlay.style.display = 'none';
-
-    // Создаем аудио элемент
+    if (!src) return;
     const audio = new Audio(src);
-    audio.style.display = 'none';
     this.shadowRoot.appendChild(audio);
     this.mediaElement = audio;
-
-    console.log('Аудио инициализировано:', src);
-
-    this.playBtn.disabled = false;
   }
 
   setupEvents() {
-    this.playBtn.addEventListener('click', () => this.togglePlay());
+    this.playButton.addEventListener('click', () => this.togglePlay());
     this.progressBar.addEventListener('input', () => this.seek());
-    this.volumeBar.addEventListener('input', () => this.setVolume());
+    this.volumeSlider.addEventListener('input', () => {
+      if (this.youtubePlayer) {
+        this.youtubePlayer.setVolume(this.volumeSlider.value);
+      } else if (this.mediaElement) {
+        this.mediaElement.volume = this.volumeSlider.value / 100;
+      }
+    });
 
-    // Общие события для audio/video
     if (this.mediaElement) {
       this.mediaElement.addEventListener('timeupdate', () => this.updateTime());
       this.mediaElement.addEventListener('loadedmetadata', () => {
-        console.log('Метаданные загружены');
-        this.updateDuration();
-      });
-      this.mediaElement.addEventListener('error', (e) => {
-        console.error('Ошибка медиа:', e);
+        this.durationEl.textContent = this.formatTime(this.mediaElement.duration);
       });
     }
   }
@@ -353,17 +282,16 @@ class HarmonyPlayer extends HTMLElement {
       const state = this.youtubePlayer.getPlayerState();
       if (state === YT.PlayerState.PLAYING) {
         this.youtubePlayer.pauseVideo();
+        this.playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
       } else {
         this.youtubePlayer.playVideo();
+        this.playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
       }
     } else if (this.mediaElement) {
       if (this.mediaElement.paused) {
         this.mediaElement.play()
           .then(() => {
             this.playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
-          })
-          .catch(e => {
-            console.error('Ошибка воспроизведения:', e);
           });
       } else {
         this.mediaElement.pause();
@@ -382,64 +310,24 @@ class HarmonyPlayer extends HTMLElement {
     }
   }
 
-  setVolume() {
-    const volume = this.volumeBar.value / 100;
-    if (this.youtubePlayer) {
-      this.youtubePlayer.setVolume(volume * 100);
-    } else if (this.mediaElement) {
-      this.mediaElement.volume = volume;
-    }
-  }
-
-  startTimeUpdate() {
-    clearInterval(this.currentTimeInterval);
-    this.currentTimeInterval = setInterval(() => {
-      this.updateTime();
-    }, 1000);
-  }
-
   updateTime() {
-    let currentTime, duration;
-
     if (this.youtubePlayer) {
-      currentTime = this.youtubePlayer.getCurrentTime();
-      duration = this.youtubePlayer.getDuration();
+      const currentTime = this.youtubePlayer.getCurrentTime();
+      const duration = this.youtubePlayer.getDuration();
+      this.currentTimeEl.textContent = this.formatTime(currentTime);
+      this.durationEl.textContent = this.formatTime(duration);
+      this.progressBar.value = (currentTime / duration) * 100;
     } else if (this.mediaElement) {
-      currentTime = this.mediaElement.currentTime;
-      duration = this.mediaElement.duration;
-    } else {
-      return;
+      this.currentTimeEl.textContent = this.formatTime(this.mediaElement.currentTime);
+      this.progressBar.value = (this.mediaElement.currentTime / this.mediaElement.duration) * 100;
     }
-
-    this.timeDisplay.textContent = `${this.formatTime(currentTime)} / ${this.formatTime(duration)}`;
-    this.progressBar.value = (currentTime / duration) * 100;
-  }
-
-  updateDuration() {
-    if (!this.mediaElement) return;
-    this.timeDisplay.textContent = `0:00 / ${this.formatTime(this.mediaElement.duration)}`;
-  }
-
-  updateYouTubeDuration() {
-    if (!this.youtubePlayer) return;
-    this.timeDisplay.textContent = `0:00 / ${this.formatTime(this.youtubePlayer.getDuration())}`;
   }
 
   formatTime(seconds) {
-    if (isNaN(seconds)) return "--:--";
+    if (isNaN(seconds)) return "0:00";
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  }
-
-  static get observedAttributes() {
-    return ['src', 'type', 'video-id'];
-  }
-
-  attributeChangedCallback(name, oldValue, newValue) {
-    if (name === 'src' && this.mediaElement) {
-      this.mediaElement.src = newValue;
-    }
   }
 }
 
