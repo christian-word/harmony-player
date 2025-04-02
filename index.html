@@ -1,16 +1,66 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>Harmony Player Demo</title>
-    <!-- Подключаем наш компонент -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест Harmony Player</title>
+    <!-- Подключаем наш Web Component -->
     <script src="src/HarmonyPlayer.js" type="module"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #007bff;
+        }
+        .players-container {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            margin-top: 40px;
+        }
+    </style>
 </head>
 <body>
-    <h1>Мой плеер</h1>
-    <!-- Используем как обычный HTML-тег -->
-    <harmony-player 
-        type="audio" 
-        src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-    ></harmony-player>
+    <h1>Harmony Player — Тестовая страница</h1>
+    <p>Демонстрация работы аудио, видео и YouTube плеера</p>
+
+    <div class="players-container">
+        <!-- 1. Аудио плеер -->
+        <section>
+            <h2>Аудио (MP3)</h2>
+            <harmony-player 
+                type="audio"
+                src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+            ></harmony-player>
+        </section>
+
+        <!-- 2. Видео плеер -->
+        <section>
+            <h2>Видео (MP4)</h2>
+            <harmony-player
+                type="video"
+                src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+            ></harmony-player>
+        </section>
+
+        <!-- 3. YouTube плеер -->
+        <section>
+            <h2>YouTube</h2>
+            <harmony-player
+                type="youtube"
+                video-id="dQw4w9WgXcQ"
+            ></harmony-player>
+            <p><small>Для YouTube на мобильных потребуется доработка API</small></p>
+        </section>
+    </div>
+
+    <footer style="margin-top: 50px;">
+        <p>Проект: <strong>Harmony Player</strong> | Web Component</p>
+    </footer>
 </body>
 </html>
