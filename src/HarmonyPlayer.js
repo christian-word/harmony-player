@@ -2,98 +2,332 @@ class HarmonyPlayer extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this.media = null;
-    this.isPlaying = false;
+    this.youtubePlayer = null;
+    this.mediaElement = null;
 
+    // Оригинальный дизайн (как у вас было)
     this.shadowRoot.innerHTML = `
       <style>
-        /* Минимальные стили для работы */
-        .player { width: 100%; }
-        video, audio { width: 100%; }
-        .youtube-container {
-          position: relative;
-          padding-bottom: 56.25%;
-          height: 0;
+        .player-container {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          padding: 15px;
+          background: #f5f5f5;
+          border-radius: 15px;
+          width: 100%;
+          max-width: 500px;
+          margin: 20px auto;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          font-family: Arial, sans-serif;
+        }
+        
+        .player-controls {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+        }
+        
+        .play-button {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #007bff;
+          color: white;
+          cursor: pointer;
+          border: none;
+          transition: background 0.3s;
+          flex-shrink: 0;
+        }
+        
+        .play-button:hover {
+          background: #0069d9;
+        }
+        
+        .play-button svg {
+          width: 20px;
+          height: 20px;
+          fill: currentColor;
+        }
+        
+        .progress-container {
+          flex-grow: 1;
+        }
+        
+        .progress-bar {
+          width: 100%;
+          height: 4px;
+          cursor: pointer;
+          accent-color: #007bff;
+        }
+        
+        .time-info {
+          display: flex;
+          justify-content: space-between;
+          font-size: 12px;
+          color: #666;
+          margin-top: 3px;
+        }
+        
+        .volume-control {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          flex-shrink: 0;
+        }
+        
+        .volume-icon {
+          width: 20px;
+          height: 20px;
+        }
+        
+        .volume-slider {
+          width: 80px;
+          height: 4px;
+          accent-color: #007bff;
+          cursor: pointer;
+        }
+        
+        /* Стили для медиа-контейнера */
+        .media-container {
+          display: none;
+          margin-bottom: 10px;
+          border-radius: 8px;
           overflow: hidden;
         }
-        .youtube-iframe {
+        
+        :host([type="video"]) .media-container,
+        :host([type="youtube"]) .media-container {
+          display: block;
+        }
+        
+        video, .youtube-iframe {
+          width: 100%;
+          display: block;
+        }
+        
+        /* Мобильный оверлей для YouTube */
+        .mobile-overlay {
+          display: none;
           position: absolute;
           top: 0;
           left: 0;
           width: 100%;
           height: 100%;
-          border: 0;
+          background: rgba(0,0,0,0.7);
+          color: white;
+          justify-content: center;
+          align-items: center;
+          flex-direction: column;
+        }
+        
+        :host([type="youtube"]) .mobile-overlay {
+          display: ${/Android|iPhone|iPad/i.test(navigator.userAgent) ? 'flex' : 'none'};
         }
       </style>
-      <div class="player">
-        <video></video>
-        <audio></audio>
-        <div class="youtube-container">
-          <iframe class="youtube-iframe" allowfullscreen></iframe>
+      
+      <div class="player-container">
+        <!-- Контейнер для видео/YouTube -->
+        <div class="media-container">
+          <video></video>
+          <div class="youtube-iframe"></div>
+          <div class="mobile-overlay">
+            <button class="play-button" style="margin-bottom: 10px;">
+              <svg viewBox="0 0 24 24" width="30" height="30">
+                <path d="M8 5v14l11-7z" fill="white"/>
+              </svg>
+            </button>
+            
+          </div>
+        </div>
+        
+        <!-- Оригинальные контролы (как у вас было) -->
+        <div class="player-controls">
+          <button class="play-button" id="playButton">
+            <svg viewBox="0 0 24 24" id="playIcon">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </button>
+          
+          <div class="progress-container">
+            <input type="range" class="progress-bar" id="progressBar" min="0" max="100" value="0">
+            <div class="time-info">
+              <span id="currentTime">0:00</span>
+              <span id="duration">0:00</span>
+            </div>
+          </div>
+          
+          <div class="volume-control">
+            <svg class="volume-icon" viewBox="0 0 24 24">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+            </svg>
+            <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="70">
+          </div>
         </div>
       </div>
     `;
 
-    this.video = this.shadowRoot.querySelector('video');
-    this.audio = this.shadowRoot.querySelector('audio');
-    this.iframe = this.shadowRoot.querySelector('.youtube-iframe');
+    // Получаем элементы
+    this.playButton = this.shadowRoot.getElementById('playButton');
+    this.playIcon = this.shadowRoot.getElementById('playIcon');
+    this.progressBar = this.shadowRoot.getElementById('progressBar');
+    this.volumeSlider = this.shadowRoot.getElementById('volumeSlider');
+    this.currentTimeEl = this.shadowRoot.getElementById('currentTime');
+    this.durationEl = this.shadowRoot.getElementById('duration');
+    this.videoElement = this.shadowRoot.querySelector('video');
+    this.youtubeContainer = this.shadowRoot.querySelector('.youtube-iframe');
+    this.mobileOverlay = this.shadowRoot.querySelector('.mobile-overlay');
   }
 
   connectedCallback() {
-    const type = this.getAttribute('type');
+    const type = this.getAttribute('type') || 'audio';
     const src = this.getAttribute('src');
     const videoId = this.getAttribute('video-id');
 
-    if (type === 'youtube' && videoId) {
+    if (type === 'youtube') {
       this.initYouTube(videoId);
-    } else if (type === 'video' && src) {
+    } else if (type === 'video') {
       this.initVideo(src);
-    } else if (type === 'audio' && src) {
+    } else {
       this.initAudio(src);
     }
+
+    this.setupEvents();
   }
 
   initYouTube(videoId) {
-    this.iframe.src = `https://www.youtube.com/embed/${videoId}?enablejsapi=1&autoplay=1`;
-    this.media = this.iframe;
-    
-    window.onYouTubeIframeAPIReady = () => {
-      this.ytPlayer = new YT.Player(this.iframe, {
-        events: {
-          'onStateChange': (e) => {
-            if (e.data === YT.PlayerState.ENDED) {
-              this.dispatchEvent(new Event('ended'));
-            }
-          }
-        }
-      });
-    };
+    if (!videoId) return;
 
-    if (!window.YT) {
-      const tag = document.createElement('script');
-      tag.src = "https://www.youtube.com/iframe_api";
-      document.body.appendChild(tag);
+    if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      const mobilePlayBtn = this.mobileOverlay.querySelector('.play-button');
+      mobilePlayBtn.addEventListener('click', () => {
+        this.mobileOverlay.style.display = 'none';
+        this.loadYouTubeAPI(videoId);
+      });
+      return;
     }
+
+    this.loadYouTubeAPI(videoId);
+  }
+
+  loadYouTubeAPI(videoId) {
+    if (window.YT) {
+      this.createYouTubePlayer(videoId);
+      return;
+    }
+
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.body.appendChild(tag);
+
+    window.onYouTubeIframeAPIReady = () => {
+      this.createYouTubePlayer(videoId);
+    };
+  }
+
+  createYouTubePlayer(videoId) {
+    this.youtubePlayer = new YT.Player(this.youtubeContainer, {
+      videoId: videoId,
+      playerVars: {
+        controls: 0,
+        disablekb: 1,
+        modestbranding: 1
+      },
+      events: {
+        'onReady': () => this.onYouTubeReady(),
+        'onStateChange': (e) => this.onYouTubeStateChange(e)
+      }
+    });
   }
 
   initVideo(src) {
-    this.video.src = src;
-    this.media = this.video;
-    this.video.addEventListener('ended', () => this.dispatchEvent(new Event('ended')));
+    if (!src) return;
+    this.videoElement.src = src;
+    this.videoElement.controls = false;
+    this.mediaElement = this.videoElement;
   }
 
   initAudio(src) {
-    this.audio.src = src;
-    this.media = this.audio;
-    this.audio.addEventListener('ended', () => this.dispatchEvent(new Event('ended')));
+    if (!src) return;
+    const audio = new Audio(src);
+    this.shadowRoot.appendChild(audio);
+    this.mediaElement = audio;
   }
 
-  play() {
-    if (this.media === this.iframe && this.ytPlayer) {
-      this.ytPlayer.playVideo();
-    } else if (this.media) {
-      this.media.play().catch(e => console.error('Play error:', e));
+  setupEvents() {
+    this.playButton.addEventListener('click', () => this.togglePlay());
+    this.progressBar.addEventListener('input', () => this.seek());
+    this.volumeSlider.addEventListener('input', () => {
+      if (this.youtubePlayer) {
+        this.youtubePlayer.setVolume(this.volumeSlider.value);
+      } else if (this.mediaElement) {
+        this.mediaElement.volume = this.volumeSlider.value / 100;
+      }
+    });
+
+    if (this.mediaElement) {
+      this.mediaElement.addEventListener('timeupdate', () => this.updateTime());
+      this.mediaElement.addEventListener('loadedmetadata', () => {
+        this.durationEl.textContent = this.formatTime(this.mediaElement.duration);
+      });
     }
+  }
+
+  togglePlay() {
+    if (this.youtubePlayer) {
+      const state = this.youtubePlayer.getPlayerState();
+      if (state === YT.PlayerState.PLAYING) {
+        this.youtubePlayer.pauseVideo();
+        this.playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+      } else {
+        this.youtubePlayer.playVideo();
+        this.playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+      }
+    } else if (this.mediaElement) {
+      if (this.mediaElement.paused) {
+        this.mediaElement.play()
+          .then(() => {
+            this.playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+          });
+      } else {
+        this.mediaElement.pause();
+        this.playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+      }
+    }
+  }
+
+  seek() {
+    if (this.youtubePlayer) {
+      const duration = this.youtubePlayer.getDuration();
+      const seekTo = (this.progressBar.value / 100) * duration;
+      this.youtubePlayer.seekTo(seekTo, true);
+    } else if (this.mediaElement) {
+      this.mediaElement.currentTime = (this.progressBar.value / 100) * this.mediaElement.duration;
+    }
+  }
+
+  updateTime() {
+    if (this.youtubePlayer) {
+      const currentTime = this.youtubePlayer.getCurrentTime();
+      const duration = this.youtubePlayer.getDuration();
+      this.currentTimeEl.textContent = this.formatTime(currentTime);
+      this.durationEl.textContent = this.formatTime(duration);
+      this.progressBar.value = (currentTime / duration) * 100;
+    } else if (this.mediaElement) {
+      this.currentTimeEl.textContent = this.formatTime(this.mediaElement.currentTime);
+      this.progressBar.value = (this.mediaElement.currentTime / this.mediaElement.duration) * 100;
+    }
+  }
+
+  formatTime(seconds) {
+    if (isNaN(seconds)) return "0:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   }
 }
 
