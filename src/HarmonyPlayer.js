@@ -4,8 +4,8 @@ class HarmonyPlayer extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this.youtubePlayer = null;
     this.mediaElement = null;
+    this.isPlaying = false;
 
-    // Оригинальный дизайн (как у вас было)
     this.shadowRoot.innerHTML = `
       <style>
         .player-container {
@@ -92,7 +92,6 @@ class HarmonyPlayer extends HTMLElement {
           cursor: pointer;
         }
         
-        /* Стили для медиа-контейнера */
         .media-container {
           display: none;
           margin-bottom: 10px;
@@ -110,7 +109,6 @@ class HarmonyPlayer extends HTMLElement {
           display: block;
         }
         
-        /* Мобильный оверлей для YouTube */
         .mobile-overlay {
           display: none;
           position: absolute;
@@ -128,10 +126,16 @@ class HarmonyPlayer extends HTMLElement {
         :host([type="youtube"]) .mobile-overlay {
           display: ${/Android|iPhone|iPad/i.test(navigator.userAgent) ? 'flex' : 'none'};
         }
+
+        .loading-indicator {
+          display: none;
+          text-align: center;
+          padding: 10px;
+          color: #666;
+        }
       </style>
       
       <div class="player-container">
-        <!-- Контейнер для видео/YouTube -->
         <div class="media-container">
           <video></video>
           <div class="youtube-iframe"></div>
@@ -141,11 +145,13 @@ class HarmonyPlayer extends HTMLElement {
                 <path d="M8 5v14l11-7z" fill="white"/>
               </svg>
             </button>
-            
           </div>
         </div>
         
-        <!-- Оригинальные контролы (как у вас было) -->
+        <div class="loading-indicator">
+          <div class="spinner">Загрузка...</div>
+        </div>
+        
         <div class="player-controls">
           <button class="play-button" id="playButton">
             <svg viewBox="0 0 24 24" id="playIcon">
@@ -171,7 +177,6 @@ class HarmonyPlayer extends HTMLElement {
       </div>
     `;
 
-    // Получаем элементы
     this.playButton = this.shadowRoot.getElementById('playButton');
     this.playIcon = this.shadowRoot.getElementById('playIcon');
     this.progressBar = this.shadowRoot.getElementById('progressBar');
@@ -181,12 +186,14 @@ class HarmonyPlayer extends HTMLElement {
     this.videoElement = this.shadowRoot.querySelector('video');
     this.youtubeContainer = this.shadowRoot.querySelector('.youtube-iframe');
     this.mobileOverlay = this.shadowRoot.querySelector('.mobile-overlay');
+    this.loadingIndicator = this.shadowRoot.querySelector('.loading-indicator');
   }
 
   connectedCallback() {
     const type = this.getAttribute('type') || 'audio';
     const src = this.getAttribute('src');
     const videoId = this.getAttribute('video-id');
+    const autoplay = this.hasAttribute('autoplay');
 
     if (type === 'youtube') {
       this.initYouTube(videoId);
@@ -197,6 +204,16 @@ class HarmonyPlayer extends HTMLElement {
     }
 
     this.setupEvents();
+
+    if (autoplay) {
+      setTimeout(() => this.togglePlay(), 100);
+    }
+  }
+
+  disconnectedCallback() {
+    if (this.youtubePlayer) {
+      this.youtubePlayer.destroy();
+    }
   }
 
   initYouTube(videoId) {
@@ -235,7 +252,9 @@ class HarmonyPlayer extends HTMLElement {
       playerVars: {
         controls: 0,
         disablekb: 1,
-        modestbranding: 1
+        modestbranding: 1,
+        rel: 0,
+        enablejsapi: 1
       },
       events: {
         'onReady': () => this.onYouTubeReady(),
@@ -246,16 +265,30 @@ class HarmonyPlayer extends HTMLElement {
 
   initVideo(src) {
     if (!src) return;
+    this.showLoading();
     this.videoElement.src = src;
     this.videoElement.controls = false;
     this.mediaElement = this.videoElement;
+    this.videoElement.addEventListener('loadeddata', () => this.hideLoading());
+    this.videoElement.addEventListener('error', () => this.hideLoading());
   }
 
   initAudio(src) {
     if (!src) return;
+    this.showLoading();
     const audio = new Audio(src);
     this.shadowRoot.appendChild(audio);
     this.mediaElement = audio;
+    audio.addEventListener('loadeddata', () => this.hideLoading());
+    audio.addEventListener('error', () => this.hideLoading());
+  }
+
+  showLoading() {
+    this.loadingIndicator.style.display = 'block';
+  }
+
+  hideLoading() {
+    this.loadingIndicator.style.display = 'none';
   }
 
   setupEvents() {
@@ -274,6 +307,33 @@ class HarmonyPlayer extends HTMLElement {
       this.mediaElement.addEventListener('loadedmetadata', () => {
         this.durationEl.textContent = this.formatTime(this.mediaElement.duration);
       });
+      this.mediaElement.addEventListener('ended', () => {
+        this.dispatchEvent(new CustomEvent('track-ended', { bubbles: true }));
+      });
+    }
+  }
+
+  onYouTubeReady() {
+    this.durationEl.textContent = this.formatTime(this.youtubePlayer.getDuration());
+    this.youtubePlayer.setVolume(this.volumeSlider.value);
+    this.hideLoading();
+  }
+
+  onYouTubeStateChange(event) {
+    switch(event.data) {
+      case YT.PlayerState.PLAYING:
+        this.playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+        this.isPlaying = true;
+        break;
+      case YT.PlayerState.PAUSED:
+        this.playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+        this.isPlaying = false;
+        break;
+      case YT.PlayerState.ENDED:
+        this.playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+        this.isPlaying = false;
+        this.dispatchEvent(new CustomEvent('track-ended', { bubbles: true }));
+        break;
     }
   }
 
@@ -282,20 +342,20 @@ class HarmonyPlayer extends HTMLElement {
       const state = this.youtubePlayer.getPlayerState();
       if (state === YT.PlayerState.PLAYING) {
         this.youtubePlayer.pauseVideo();
-        this.playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
       } else {
         this.youtubePlayer.playVideo();
-        this.playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
       }
     } else if (this.mediaElement) {
       if (this.mediaElement.paused) {
         this.mediaElement.play()
           .then(() => {
             this.playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+            this.isPlaying = true;
           });
       } else {
         this.mediaElement.pause();
         this.playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+        this.isPlaying = false;
       }
     }
   }
