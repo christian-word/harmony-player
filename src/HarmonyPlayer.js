@@ -141,7 +141,7 @@ class HarmonyPlayer extends HTMLElement {
                 <path d="M8 5v14l11-7z" fill="white"/>
               </svg>
             </button>
-            <p style="color: white; margin: 0;">Нажмите для воспроизведения</p>
+            
           </div>
         </div>
         
