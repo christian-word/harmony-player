@@ -108,48 +108,12 @@ class HarmonyPlayer extends HTMLElement {
           width: 100%;
           display: block;
         }
-        
-        .mobile-overlay {
-          display: none;
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background: rgba(0,0,0,0.7);
-          color: white;
-          justify-content: center;
-          align-items: center;
-          flex-direction: column;
-        }
-        
-        :host([type="youtube"]) .mobile-overlay {
-          display: ${/Android|iPhone|iPad/i.test(navigator.userAgent) ? 'flex' : 'none'};
-        }
-
-        .loading-indicator {
-          display: none;
-          text-align: center;
-          padding: 10px;
-          color: #666;
-        }
       </style>
       
       <div class="player-container">
         <div class="media-container">
           <video></video>
           <div class="youtube-iframe"></div>
-          <div class="mobile-overlay">
-            <button class="play-button" style="margin-bottom: 10px;">
-              <svg viewBox="0 0 24 24" width="30" height="30">
-                <path d="M8 5v14l11-7z" fill="white"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-        
-        <div class="loading-indicator">
-          <div class="spinner">Загрузка...</div>
         </div>
         
         <div class="player-controls">
@@ -185,15 +149,12 @@ class HarmonyPlayer extends HTMLElement {
     this.durationEl = this.shadowRoot.getElementById('duration');
     this.videoElement = this.shadowRoot.querySelector('video');
     this.youtubeContainer = this.shadowRoot.querySelector('.youtube-iframe');
-    this.mobileOverlay = this.shadowRoot.querySelector('.mobile-overlay');
-    this.loadingIndicator = this.shadowRoot.querySelector('.loading-indicator');
   }
 
   connectedCallback() {
     const type = this.getAttribute('type') || 'audio';
     const src = this.getAttribute('src');
     const videoId = this.getAttribute('video-id');
-    const autoplay = this.hasAttribute('autoplay');
 
     if (type === 'youtube') {
       this.initYouTube(videoId);
@@ -204,100 +165,40 @@ class HarmonyPlayer extends HTMLElement {
     }
 
     this.setupEvents();
-
-    if (autoplay) {
-      setTimeout(() => this.togglePlay(), 100);
-    }
-  }
-
-  disconnectedCallback() {
-    if (this.youtubePlayer) {
-      this.youtubePlayer.destroy();
-    }
   }
 
   initYouTube(videoId) {
     if (!videoId) return;
 
-    if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
-      const mobilePlayBtn = this.mobileOverlay.querySelector('.play-button');
-      mobilePlayBtn.addEventListener('click', () => {
-        this.mobileOverlay.style.display = 'none';
-        this.loadYouTubeAPI(videoId);
-      });
-      return;
-    }
+    const iframe = document.createElement('iframe');
+    iframe.src = `https://www.youtube.com/embed/${videoId}?enablejsapi=1`;
+    iframe.setAttribute('frameborder', '0');
+    iframe.setAttribute('allow', 'accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture');
+    this.youtubeContainer.appendChild(iframe);
 
-    this.loadYouTubeAPI(videoId);
-  }
-
-  loadYouTubeAPI(videoId) {
-    if (window.YT) {
-      this.createYouTubePlayer(videoId);
-      return;
-    }
-
-    const tag = document.createElement('script');
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.body.appendChild(tag);
-
-    window.onYouTubeIframeAPIReady = () => {
-      this.createYouTubePlayer(videoId);
+    iframe.onload = () => {
+      this.forcePlay();
     };
-  }
-
-  createYouTubePlayer(videoId) {
-    this.youtubePlayer = new YT.Player(this.youtubeContainer, {
-      videoId: videoId,
-      playerVars: {
-        controls: 0,
-        disablekb: 1,
-        modestbranding: 1,
-        rel: 0,
-        enablejsapi: 1
-      },
-      events: {
-        'onReady': () => this.onYouTubeReady(),
-        'onStateChange': (e) => this.onYouTubeStateChange(e)
-      }
-    });
   }
 
   initVideo(src) {
     if (!src) return;
-    this.showLoading();
     this.videoElement.src = src;
-    this.videoElement.controls = false;
     this.mediaElement = this.videoElement;
-    this.videoElement.addEventListener('loadeddata', () => this.hideLoading());
-    this.videoElement.addEventListener('error', () => this.hideLoading());
   }
 
   initAudio(src) {
     if (!src) return;
-    this.showLoading();
     const audio = new Audio(src);
     this.shadowRoot.appendChild(audio);
     this.mediaElement = audio;
-    audio.addEventListener('loadeddata', () => this.hideLoading());
-    audio.addEventListener('error', () => this.hideLoading());
-  }
-
-  showLoading() {
-    this.loadingIndicator.style.display = 'block';
-  }
-
-  hideLoading() {
-    this.loadingIndicator.style.display = 'none';
   }
 
   setupEvents() {
     this.playButton.addEventListener('click', () => this.togglePlay());
     this.progressBar.addEventListener('input', () => this.seek());
     this.volumeSlider.addEventListener('input', () => {
-      if (this.youtubePlayer) {
-        this.youtubePlayer.setVolume(this.volumeSlider.value);
-      } else if (this.mediaElement) {
+      if (this.mediaElement) {
         this.mediaElement.volume = this.volumeSlider.value / 100;
       }
     });
@@ -313,71 +214,37 @@ class HarmonyPlayer extends HTMLElement {
     }
   }
 
-  onYouTubeReady() {
-    this.durationEl.textContent = this.formatTime(this.youtubePlayer.getDuration());
-    this.youtubePlayer.setVolume(this.volumeSlider.value);
-    this.hideLoading();
-  }
-
-  onYouTubeStateChange(event) {
-    switch(event.data) {
-      case YT.PlayerState.PLAYING:
-        this.playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
-        this.isPlaying = true;
-        break;
-      case YT.PlayerState.PAUSED:
-        this.playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
-        this.isPlaying = false;
-        break;
-      case YT.PlayerState.ENDED:
-        this.playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
-        this.isPlaying = false;
-        this.dispatchEvent(new CustomEvent('track-ended', { bubbles: true, composed: true }));
-        break;
+  forcePlay() {
+    if (this.mediaElement) {
+      this.mediaElement.play().catch(e => console.error('Playback failed:', e));
+    } else if (this.youtubeContainer.firstChild) {
+      this.youtubeContainer.firstChild.contentWindow.postMessage(JSON.stringify({
+        event: 'command',
+        func: 'playVideo'
+      }), '*');
     }
   }
 
   togglePlay() {
-    if (this.youtubePlayer) {
-      const state = this.youtubePlayer.getPlayerState();
-      if (state === YT.PlayerState.PLAYING) {
-        this.youtubePlayer.pauseVideo();
-      } else {
-        this.youtubePlayer.playVideo();
-      }
-    } else if (this.mediaElement) {
+    if (this.mediaElement) {
       if (this.mediaElement.paused) {
-        this.mediaElement.play()
-          .then(() => {
-            this.playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
-            this.isPlaying = true;
-          });
+        this.mediaElement.play();
+        this.playIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
       } else {
         this.mediaElement.pause();
         this.playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
-        this.isPlaying = false;
       }
     }
   }
 
   seek() {
-    if (this.youtubePlayer) {
-      const duration = this.youtubePlayer.getDuration();
-      const seekTo = (this.progressBar.value / 100) * duration;
-      this.youtubePlayer.seekTo(seekTo, true);
-    } else if (this.mediaElement) {
+    if (this.mediaElement) {
       this.mediaElement.currentTime = (this.progressBar.value / 100) * this.mediaElement.duration;
     }
   }
 
   updateTime() {
-    if (this.youtubePlayer) {
-      const currentTime = this.youtubePlayer.getCurrentTime();
-      const duration = this.youtubePlayer.getDuration();
-      this.currentTimeEl.textContent = this.formatTime(currentTime);
-      this.durationEl.textContent = this.formatTime(duration);
-      this.progressBar.value = (currentTime / duration) * 100;
-    } else if (this.mediaElement) {
+    if (this.mediaElement) {
       this.currentTimeEl.textContent = this.formatTime(this.mediaElement.currentTime);
       this.progressBar.value = (this.mediaElement.currentTime / this.mediaElement.duration) * 100;
     }
